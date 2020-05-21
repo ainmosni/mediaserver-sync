@@ -57,9 +57,7 @@ func DeleteCacheFile(fso *FilesystemObject) {
 	}
 
 	lock.Lock()
-	if _, ok := cache[fso.Path]; ok {
-		delete(cache, fso.Path)
-	}
+	delete(cache, fso.Path)
 	lock.Unlock()
 }
 
