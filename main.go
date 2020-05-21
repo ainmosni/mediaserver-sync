@@ -48,5 +48,4 @@ func main() {
 	}
 	logger.Info("starting server")
 	logger.Fatal("stopping server", zap.Error(s.Serve()))
-
 }

@@ -42,16 +42,17 @@ func (h *FileInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	logger.Info("Received HTTP request")
 	switch m := r.Method; m {
 	case "GET":
-		h.serveCachedFiles(w, r, logger)
+		h.serveCachedFiles(w, logger)
 	default:
 		httputil.ErrResponse(w, errors.New("method not supported"), http.StatusMethodNotAllowed)
 	}
 }
 
-func (h *FileInfoHandler) serveCachedFiles(w http.ResponseWriter, r *http.Request, logger *zap.Logger) {
+func (h *FileInfoHandler) serveCachedFiles(w http.ResponseWriter, logger *zap.Logger) {
 	files := fs.GetAllFilesFromCache()
 	f, err := json.Marshal(files)
 	if httputil.ErrResponse(w, err, http.StatusInternalServerError) {
+		logger.Error("couldn't encode to JSON", zap.Error(err))
 		return
 	}
 	httputil.JSONResponse(w, f, http.StatusOK)

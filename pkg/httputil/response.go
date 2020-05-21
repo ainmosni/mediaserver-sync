@@ -33,7 +33,7 @@ func Response(w http.ResponseWriter, contentType string, body []byte, statusCode
 
 // JSONResponse sends a JSON response
 func JSONResponse(w http.ResponseWriter, body []byte, statusCode int) {
-	Response(w, JSON_CONTENT_TYPE, body, statusCode)
+	Response(w, JSONContentType, body, statusCode)
 }
 
 // ErrResponse sends an error response if err contains one, returns false if not.

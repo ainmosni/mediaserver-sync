@@ -17,7 +17,7 @@ limitations under the License.
 package fs
 
 import (
-	"crypto/sha1"
+	"crypto/sha1" //nolint:gosec // Not meant to be super secure.
 	"errors"
 	"fmt"
 	"io"
@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	PATH_KEY = "path"
+	PathKey = "path"
 )
 
 var (
@@ -62,28 +62,28 @@ type FilesystemObject struct {
 	logger *zap.Logger
 	sync.Mutex
 	// Ugly hack so we don't have to retype the field all the time.
-	path_field zap.Field
+	pathField zap.Field
 }
 
 // NewFSObj create a new FileSystemObject
 func NewFSObj(path string, info os.FileInfo, root bool, logger *zap.Logger) (*FilesystemObject, error) {
-	path_field := zap.String(PATH_KEY, path)
+	pathField := zap.String(PathKey, path)
 	fso := FilesystemObject{
-		Path:       path,
-		Size:       info.Size(),
-		ModTime:    info.ModTime(),
-		Mode:       info.Mode(),
-		Root:       root,
-		IsDir:      info.IsDir(),
-		Children:   []*FilesystemObject{},
-		logger:     logger,
-		path_field: path_field,
+		Path:      path,
+		Size:      info.Size(),
+		ModTime:   info.ModTime(),
+		Mode:      info.Mode(),
+		Root:      root,
+		IsDir:     info.IsDir(),
+		Children:  []*FilesystemObject{},
+		logger:    logger,
+		pathField: pathField,
 	}
 
 	if !fso.IsDir && fso.Mode.IsRegular() {
 		err := fso.GenerateSum()
 		if err != nil {
-			logger.Error("couldn't generate sum", path_field, zap.Error(err))
+			logger.Error("couldn't generate sum", pathField, zap.Error(err))
 			return &FilesystemObject{}, fmt.Errorf("couldn't generate sum for %s: %w", fso.Path, err)
 		}
 	}
@@ -91,7 +91,7 @@ func NewFSObj(path string, info os.FileInfo, root bool, logger *zap.Logger) (*Fi
 	if !fso.IsDir && fso.Mode.IsRegular() {
 		err := fso.DetectContentType()
 		if err != nil {
-			logger.Error("couldn't detect content-type", path_field, zap.Error(err))
+			logger.Error("couldn't detect content-type", pathField, zap.Error(err))
 			return &FilesystemObject{}, fmt.Errorf("couldn't detect content-type for %s: %w", fso.Path, err)
 		}
 	}
@@ -99,21 +99,21 @@ func NewFSObj(path string, info os.FileInfo, root bool, logger *zap.Logger) (*Fi
 	return &fso, nil
 }
 
-// FSObjFromPath stats a path and creates a FilesystemObject from it.
-func FSObjFromPath(path string, root bool, logger *zap.Logger) (*FilesystemObject, error) {
-	path_field := zap.String(PATH_KEY, path)
+// ObjFromPath stats a path and creates a FilesystemObject from it.
+func ObjFromPath(path string, root bool, logger *zap.Logger) (*FilesystemObject, error) {
+	pathField := zap.String(PathKey, path)
 	fileInfo, err := os.Stat(path)
 	if err != nil {
-		logger.Error("coudn't stat", path_field, zap.Error(err))
-		return &FilesystemObject{}, fmt.Errorf("Couldn't stat %s: %w", path, err)
+		logger.Error("coudn't stat", pathField, zap.Error(err))
+		return &FilesystemObject{}, fmt.Errorf("couldn't stat %s: %w", path, err)
 	}
 	f, ok := GetFromCache(path)
 	if ok && f.IsEqual(path, fileInfo.Size(), fileInfo.ModTime()) {
-		logger.Debug("file size/mtime is equal to cache", path_field)
+		logger.Debug("file size/mtime is equal to cache", pathField)
 		return f, nil
 	}
 
-	logger.Debug("not equal or not cached, creating new object", path_field)
+	logger.Debug("not equal or not cached, creating new object", pathField)
 	return NewFSObj(path, fileInfo, root, logger)
 }
 
@@ -123,18 +123,18 @@ func (fso *FilesystemObject) GenerateSum() error {
 		return ErrIsDir
 	}
 
-	fso.logger.Debug("generating checksum", fso.path_field)
+	fso.logger.Debug("generating checksum", fso.pathField)
 
 	f, err := os.Open(fso.Path)
 	if err != nil {
-		fso.logger.Error("couldn't open file", fso.path_field, zap.Error(err))
+		fso.logger.Error("couldn't open file", fso.pathField, zap.Error(err))
 		return err
 	}
 	defer f.Close()
 
-	h := sha1.New()
+	h := sha1.New() //nolint:gosec // This is for an equality test, doesn't have to be too secure.
 	if _, err := io.Copy(h, f); err != nil {
-		fso.logger.Error("couldn't generate checksum", fso.path_field, zap.Error(err))
+		fso.logger.Error("couldn't generate checksum", fso.pathField, zap.Error(err))
 		return err
 	}
 
@@ -148,14 +148,14 @@ func (fso *FilesystemObject) DetectContentType() error {
 	if fso.IsDir {
 		return ErrIsDir
 	}
-	fso.logger.Debug("detecting content-type", fso.path_field)
+	fso.logger.Debug("detecting content-type", fso.pathField)
 
 	// We only need the first 512 bytes to detect the content
 	buf := make([]byte, 512)
 
 	f, err := os.Open(fso.Path)
 	if err != nil {
-		fso.logger.Error("couldn't open file", fso.path_field, zap.Error(err))
+		fso.logger.Error("couldn't open file", fso.pathField, zap.Error(err))
 		return err
 	}
 	defer f.Close()
@@ -163,11 +163,11 @@ func (fso *FilesystemObject) DetectContentType() error {
 	_, err = f.Read(buf)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			fso.logger.Debug("received EOF in first 512 bytes", fso.path_field)
+			fso.logger.Debug("received EOF in first 512 bytes", fso.pathField)
 			fso.ContentType = ""
 			return nil
 		}
-		fso.logger.Error("couldn't read first 512 bytes", fso.path_field, zap.Error(err))
+		fso.logger.Error("couldn't read first 512 bytes", fso.pathField, zap.Error(err))
 		return err
 	}
 
@@ -185,9 +185,9 @@ func (fso *FilesystemObject) Scan() error {
 	defer fso.Unlock()
 
 	if fso.Root {
-		fso.logger.Info("scanning directory", fso.path_field)
+		fso.logger.Info("scanning directory", fso.pathField)
 	} else {
-		fso.logger.Debug("scanning directory", fso.path_field)
+		fso.logger.Debug("scanning directory", fso.pathField)
 	}
 
 	// Clean up Children.
@@ -195,7 +195,7 @@ func (fso *FilesystemObject) Scan() error {
 
 	files, err := ioutil.ReadDir(fso.Path)
 	if err != nil {
-		fso.logger.Error("couldn't read directory", fso.path_field, zap.Error(err))
+		fso.logger.Error("couldn't read directory", fso.pathField, zap.Error(err))
 		return err
 	}
 
@@ -206,17 +206,17 @@ func (fso *FilesystemObject) Scan() error {
 			// We're skipping over files we can't read.
 			// TODO: Handle these better, but for now they don't matter to us.
 			if os.IsPermission(errors.Unwrap(err)) {
-				fso.logger.Info("skipping file", zap.String(PATH_KEY, path), zap.Error(err))
+				fso.logger.Info("skipping file", zap.String(PathKey, path), zap.Error(err))
 				continue
 			}
-			fso.logger.Error("couldn't create new FSO", zap.String(PATH_KEY, path), zap.Error(err))
+			fso.logger.Error("couldn't create new FSO", zap.String(PathKey, path), zap.Error(err))
 			return err
 		}
 		fso.Children = append(fso.Children, f)
 		if f.IsDir {
 			err = f.Scan()
 			if err != nil {
-				fso.logger.Error("couldn't scan child", zap.String(PATH_KEY, f.Path), zap.Error(err))
+				fso.logger.Error("couldn't scan child", zap.String(PathKey, f.Path), zap.Error(err))
 				return err
 			}
 		}
@@ -230,16 +230,16 @@ func (fso *FilesystemObject) Clean() error {
 		return ErrIsNotDir
 	}
 	if fso.Root {
-		fso.logger.Info("cleaning up empty directories", fso.path_field)
+		fso.logger.Info("cleaning up empty directories", fso.pathField)
 	} else {
-		fso.logger.Debug("cleaning up empty directories", fso.path_field)
+		fso.logger.Debug("cleaning up empty directories", fso.pathField)
 	}
 
 	// Populate the entire tree, but only for the root object
 	if fso.Root {
 		err := fso.Scan()
 		if err != nil {
-			fso.logger.Error("couldn't scan for cleanup", fso.path_field, zap.Error(err))
+			fso.logger.Error("couldn't scan for cleanup", fso.pathField, zap.Error(err))
 			return err
 		}
 	}
@@ -260,10 +260,9 @@ func (fso *FilesystemObject) Clean() error {
 				newChildren = append(newChildren, f)
 				continue
 			}
-			fso.logger.Error("can't clean up child", zap.String(PATH_KEY, f.Path), zap.Error(err))
+			fso.logger.Error("can't clean up child", zap.String(PathKey, f.Path), zap.Error(err))
 			return err
 		}
-
 	}
 	fso.Children = newChildren
 
@@ -279,10 +278,9 @@ func (fso *FilesystemObject) Clean() error {
 
 	// All checks done, delete the directory.
 	// return os.Remove(fso.Path)
-	fso.logger.Info("deleting empty directory", fso.path_field)
+	fso.logger.Info("deleting empty directory", fso.pathField)
 	DeleteCacheFile(fso)
 	return nil
-
 }
 
 // UpdateCache updates the filecache to reflect its current state.
@@ -290,7 +288,7 @@ func (fso *FilesystemObject) UpdateCache() {
 	if fso.Root {
 		fso.logger.Debug("starting cache rebuild")
 	}
-	fso.logger.Debug("updating cache", fso.path_field)
+	fso.logger.Debug("updating cache", fso.pathField)
 
 	for _, f := range fso.Children {
 		if f.IsDir {
@@ -301,10 +299,10 @@ func (fso *FilesystemObject) UpdateCache() {
 			UpdateCacheFile(f)
 		}
 	}
-
 }
 
-// IsEqual deterimines if the FSO is the same as on disk, mostly a quick check to see if the checsum needs to be updated.
+// IsEqual deterimines if the FSO is the same as on disk.
+// Just a quick check to see if the checsum needs to be updated.
 func (fso *FilesystemObject) IsEqual(path string, size int64, modTime time.Time) bool {
 	return fso.Path == path && fso.Size == size && fso.ModTime == modTime
 }
