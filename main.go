@@ -18,9 +18,9 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ainmosni/mediasync-server/pkg/fs"
-
 	"github.com/ainmosni/mediasync-server/pkg/server"
 
 	"github.com/ainmosni/mediasync-server/pkg/config"
@@ -38,13 +38,23 @@ func main() {
 		logger.Fatal("can't get configuration", zap.Error(err))
 	}
 	s := server.New("0.0.0.0", 4242, logger)
+	r := fs.NewRegistry(logger)
+	s.Handle("/fileinfo", server.NewFileInfoHandler(r, logger))
 	for _, p := range c.FilePaths {
-		fm, err := fs.NewMonitor(p.DiskPath, logger.With(zap.String("root_path", p.DiskPath)))
-		if err != nil {
-			logger.Fatal("couldn't start monitor")
+		servePath := p.ServePath
+		if !strings.HasSuffix(p.ServePath, "/") {
+			servePath += "/"
 		}
-		go fm.Monitor()
-		defer fm.StopMonitor()
+
+		err := r.Register(servePath, p.DiskPath)
+		if err != nil {
+			logger.Sugar().Fatalf("Couldn't register",
+				zap.String("servePath", servePath),
+				zap.String("diskPath", p.DiskPath),
+				zap.Error(err),
+			)
+		}
+		s.Handle(servePath, server.NewDownloadHandler(p.DiskPath, servePath, logger))
 	}
 	logger.Info("starting server")
 	logger.Fatal("stopping server", zap.Error(s.Serve()))

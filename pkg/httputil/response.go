@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package httputil contains HTTP helper utilities.
 package httputil
 
 import (

@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package config manages configuration, via files, env vars and command line flags.
 package config
 
 import (
