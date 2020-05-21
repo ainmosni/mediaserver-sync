@@ -21,18 +21,18 @@ import (
 )
 
 const (
-	CONFIG_NAME = "config"
+	ConfigName = "config"
 )
 
-var CONFIG_PATHS = [...]string{
+var ConfigPaths = [...]string{
 	".",
 	"/etc/mediasync",
 	"~/.config/mediasync",
 }
 
 func GetConfig() (*Configuration, error) {
-	viper.SetConfigName(CONFIG_NAME)
-	for _, cp := range CONFIG_PATHS {
+	viper.SetConfigName(ConfigName)
+	for _, cp := range ConfigPaths {
 		viper.AddConfigPath(cp)
 	}
 
