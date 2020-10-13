@@ -14,10 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package fs is an abstraction for needed filesystem operations.
 package fs
 
 import (
-	"crypto/sha1" //nolint:gosec // Not meant to be super secure.
 	"errors"
 	"fmt"
 	"io"
@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strings"
 	"sync"
 	"time"
 
@@ -44,12 +45,14 @@ var (
 
 	// ErrDirNotEmpty communicates that the directory isn't empty.
 	ErrDirNotEmpty = errors.New("directory not empty")
+
+	// ErrIsNotFile communicates that the operation only works on normal files.
+	ErrIsNotFile = errors.New("file is not a normal file")
 )
 
 // FilesystemObject is a representation of a filesystem object.
 type FilesystemObject struct {
 	Path        string    `json:"path"`
-	Hash        string    `json:"hash"`
 	ContentType string    `json:"content_type"`
 	Size        int64     `json:"size"`
 	ModTime     time.Time `json:"mod_time"`
@@ -81,14 +84,6 @@ func NewFSObj(path string, info os.FileInfo, root bool, logger *zap.Logger) (*Fi
 	}
 
 	if !fso.IsDir && fso.Mode.IsRegular() {
-		err := fso.GenerateSum()
-		if err != nil {
-			logger.Error("couldn't generate sum", pathField, zap.Error(err))
-			return &FilesystemObject{}, fmt.Errorf("couldn't generate sum for %s: %w", fso.Path, err)
-		}
-	}
-
-	if !fso.IsDir && fso.Mode.IsRegular() {
 		err := fso.DetectContentType()
 		if err != nil {
 			logger.Error("couldn't detect content-type", pathField, zap.Error(err))
@@ -107,40 +102,9 @@ func ObjFromPath(path string, root bool, logger *zap.Logger) (*FilesystemObject,
 		logger.Error("coudn't stat", pathField, zap.Error(err))
 		return &FilesystemObject{}, fmt.Errorf("couldn't stat %s: %w", path, err)
 	}
-	f, ok := GetFromCache(path)
-	if ok && f.IsEqual(path, fileInfo.Size(), fileInfo.ModTime()) {
-		logger.Debug("file size/mtime is equal to cache", pathField)
-		return f, nil
-	}
 
-	logger.Debug("not equal or not cached, creating new object", pathField)
+	logger.Debug("creating new object", pathField)
 	return NewFSObj(path, fileInfo, root, logger)
-}
-
-// GenerateSum generates a SHA-1 sum for the file.
-func (fso *FilesystemObject) GenerateSum() error {
-	if fso.IsDir {
-		return ErrIsDir
-	}
-
-	fso.logger.Debug("generating checksum", fso.pathField)
-
-	f, err := os.Open(fso.Path)
-	if err != nil {
-		fso.logger.Error("couldn't open file", fso.pathField, zap.Error(err))
-		return err
-	}
-	defer f.Close()
-
-	h := sha1.New() //nolint:gosec // This is for an equality test, doesn't have to be too secure.
-	if _, err := io.Copy(h, f); err != nil {
-		fso.logger.Error("couldn't generate checksum", fso.pathField, zap.Error(err))
-		return err
-	}
-
-	fso.Hash = fmt.Sprintf("%x", h.Sum(nil))
-
-	return nil
 }
 
 // DetectContentType detects the mimetype of
@@ -201,7 +165,7 @@ func (fso *FilesystemObject) Scan() error {
 
 	for _, file := range files {
 		path := path.Join(fso.Path, file.Name())
-		f, err := NewFSObj(path, file, false, fso.logger)
+		f, err := ObjFromPath(path, false, fso.logger)
 		if err != nil {
 			// We're skipping over files we can't read.
 			// TODO: Handle these better, but for now they don't matter to us.
@@ -277,28 +241,41 @@ func (fso *FilesystemObject) Clean() error {
 	}
 
 	// All checks done, delete the directory.
-	// return os.Remove(fso.Path)
 	fso.logger.Info("deleting empty directory", fso.pathField)
-	DeleteCacheFile(fso)
+	return fso.Delete()
+}
+
+func (fso *FilesystemObject) Open() (*os.File, error) {
+	if fso.IsDir || !fso.Mode.IsRegular() {
+		return nil, ErrIsNotFile
+	}
+	return os.Open(fso.Path)
+}
+
+func (fso *FilesystemObject) Delete() error {
+	fso.logger.Info("Deleting file", fso.pathField)
+	err := os.Remove(fso.Path)
+	if err != nil {
+		fso.logger.Error("Failed deleting file", fso.pathField, zap.Error(err))
+		return err
+	}
 	return nil
 }
 
-// UpdateCache updates the filecache to reflect its current state.
-func (fso *FilesystemObject) UpdateCache() {
-	if fso.Root {
-		fso.logger.Debug("starting cache rebuild")
-	}
-	fso.logger.Debug("updating cache", fso.pathField)
-
+// GetAllFiles gets all files in the children of the FilesystemObject
+func (fso *FilesystemObject) GetAllFiles() []*FilesystemObject {
+	r := make([]*FilesystemObject, 0)
 	for _, f := range fso.Children {
 		if f.IsDir {
-			f.UpdateCache()
+			r = append(r, f.GetAllFiles()...)
+			continue
 		}
-
-		if !f.IsDir && f.Mode.IsRegular() {
-			UpdateCacheFile(f)
+		if !f.IsDir && f.Mode.IsRegular() && !strings.HasPrefix(path.Base(f.Path), ".") && !strings.HasSuffix(f.Path, "~") {
+			r = append(r, f)
+			continue
 		}
 	}
+	return r
 }
 
 // IsEqual deterimines if the FSO is the same as on disk.

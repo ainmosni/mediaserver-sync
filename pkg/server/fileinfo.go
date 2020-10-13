@@ -27,29 +27,35 @@ import (
 )
 
 type FileInfoHandler struct {
-	logger *zap.Logger
+	logger   *zap.Logger
+	registry *fs.Registry
 }
 
-func NewFileInfoHandler(logger *zap.Logger) *FileInfoHandler {
+func NewFileInfoHandler(registry *fs.Registry, logger *zap.Logger) *FileInfoHandler {
 	return &FileInfoHandler{
-		logger: logger,
+		logger:   logger,
+		registry: registry,
 	}
 }
 
-// Serves HTTP for the FileInfoHandler, which simply serves all the files in the cache.
+// ServeHTTP for the FileInfoHandler, which simply serves all the files in the cache.
 func (h *FileInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	logger := h.logger.With(zap.String("path", r.URL.Path))
+	logger := h.logger.With(zap.String("path", r.URL.Path), zap.String("method", r.Method))
 	logger.Info("Received HTTP request")
 	switch m := r.Method; m {
 	case "GET":
-		h.serveCachedFiles(w, logger)
+		h.serveFiles(w, logger)
 	default:
 		httputil.ErrResponse(w, errors.New("method not supported"), http.StatusMethodNotAllowed)
 	}
 }
 
-func (h *FileInfoHandler) serveCachedFiles(w http.ResponseWriter, logger *zap.Logger) {
-	files := fs.GetAllFilesFromCache()
+func (h *FileInfoHandler) serveFiles(w http.ResponseWriter, logger *zap.Logger) {
+	files, err := h.registry.GetAllFiles()
+	if httputil.ErrResponse(w, err, http.StatusInternalServerError) {
+		logger.Error("Couldn't scan files.", zap.Error(err))
+		return
+	}
 	f, err := json.Marshal(files)
 	if httputil.ErrResponse(w, err, http.StatusInternalServerError) {
 		logger.Error("couldn't encode to JSON", zap.Error(err))

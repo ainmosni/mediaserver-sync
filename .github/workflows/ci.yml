@@ -11,3 +11,18 @@ jobs:
         uses: golangci/golangci-lint-action@v1
         with:
           version: v1.27
+  build-and-push:
+    name: docker build and push
+    needs: golangci
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+      - name: Build, Tag, Push
+        uses: docker/build-push-action@v1
+        with:
+          repository: ainmosni/mediasync-server
+          tag_with_ref: true
+          tag_with_sha: true
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}

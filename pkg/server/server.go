@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package server contains the server and the HTTP endpoints.
 package server
 
 import (
@@ -30,9 +31,8 @@ type Server struct {
 	logger *zap.Logger
 }
 
+// New returns a new server.
 func New(host string, port int, logger *zap.Logger) *Server {
-	http.Handle("/fileinfo", NewFileInfoHandler(logger))
-
 	return &Server{
 		host:   host,
 		port:   port,
@@ -40,6 +40,12 @@ func New(host string, port int, logger *zap.Logger) *Server {
 	}
 }
 
-func (s *Server) Serve() error {
+// Handle is just a simple wrapper around http.Handle for now, will add more here later.
+func (s Server) Handle(path string, handler http.Handler) {
+	http.Handle(path, handler)
+}
+
+// Serve creates a new server.
+func (s Server) Serve() error {
 	return http.ListenAndServe(net.JoinHostPort(s.host, strconv.Itoa(s.port)), nil)
 }
